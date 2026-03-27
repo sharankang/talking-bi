@@ -1,0 +1,20 @@
+# environment variables
+.env
+backend/.env
+
+# python
+backend/venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+
+# seed script 
+backend/seed.py
