@@ -40,7 +40,12 @@ def run_kpi_query(kpi: KPI, time_filter: str, status_filter: str) -> list:
     tables_needed = set()
     for col in [metric, group]:
         if col and "." in col:
-            tables_needed.add(col.split(".")[0])
+            if col.upper().startswith("TO_CHAR("):
+                inner = col[8:]
+                table = inner.split(".")[0]
+                tables_needed.add(table)
+            else:
+                tables_needed.add(col.split(".")[0])
 
     print(f"Tables needed for {kpi.name}: {tables_needed}")
 
@@ -66,7 +71,11 @@ def run_kpi_query(kpi: KPI, time_filter: str, status_filter: str) -> list:
             "order_items JOIN products ON order_items.product_id = products.product_id JOIN category_translation ON products.product_category_name = category_translation.product_category_name JOIN orders ON order_items.order_id = orders.order_id",
     }
 
-    if not group:
+    # build the sql
+    if group and group.upper().startswith("TO_CHAR("):
+        from_clause = "orders"
+        sql = f"SELECT {group} as label, {select} FROM {from_clause}"
+    elif not group:
         from_clause = list(tables_needed)[0] if tables_needed else "order_items"
         sql = f"SELECT 'Total' as label, {select} FROM {from_clause}"
     else:
@@ -77,7 +86,6 @@ def run_kpi_query(kpi: KPI, time_filter: str, status_filter: str) -> list:
             if not from_clause:
                 print(f"No join map found for: {tables_needed}, using join_hint or fallback")
                 from_clause = kpi.join_hint or list(tables_needed)[0]
-
         sql = f"SELECT {group} as label, {select} FROM {from_clause}"
 
     # filters
@@ -95,7 +103,6 @@ def run_kpi_query(kpi: KPI, time_filter: str, status_filter: str) -> list:
         sql += " WHERE " + " AND ".join(conditions)
 
     if group:
-        # for time-based grouping sort chronologically, otherwise by value
         if "TO_CHAR" in group or "timestamp" in group.lower():
             sql += f" GROUP BY {group} ORDER BY {group} ASC LIMIT 24"
         else:
@@ -130,7 +137,8 @@ def generate_dashboards(req: DashboardRequest):
             "kpi": kpi.dict(),
             "data": data
         })
-        prompt = f"""
+
+    prompt = f"""
 You are a BI dashboard designer for a Brazilian e-commerce company.
 Based on the following KPIs and their real data, design 3 different dashboard layouts.
 
@@ -138,10 +146,11 @@ KPI data:
 {json.dumps(kpi_data, indent=2)}
 
 CRITICAL RULES:
-- Every dashboard MUST include ALL KPIs that have non-empty data
+- Every dashboard MUST include ALL KPIs that have non-empty data — do not drop any
 - You MUST use the exact data values provided — never invent numbers
 - Each dashboard must have a different title, description, and chart ordering
 - insight must be a real observation from the actual data shown
+- If a KPI has data, it MUST appear as a chart in every dashboard
 
 Return only valid JSON, no markdown backticks:
 {{
