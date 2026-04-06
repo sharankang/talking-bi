@@ -36,6 +36,7 @@ IMPORTANT RULES:
 
     prompt = f"""
 You are a BI assistant for a Brazilian e-commerce retail company.
+Always respond in English regardless of the data's origin language.
 
 Database schema:
 {schema_context}

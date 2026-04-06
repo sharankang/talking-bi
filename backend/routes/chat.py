@@ -42,22 +42,10 @@ def chat(req: ChatRequest):
     for msg in req.history[-6:]:
         history_str += f"{msg.role.upper()}: {msg.content}\n"
 
-    schema_context = """
-Available tables:
-- customers(customer_id, customer_unique_id, customer_city, customer_state)
-- orders(order_id, customer_id, order_status, order_purchase_timestamp)
-- order_items(order_id, product_id, price, freight_value)
-- products(product_id, product_category_name)
-- category_translation(product_category_name, product_category_name_english)
-"""
-
     prompt = f"""
-You are a conversational BI analyst for a Brazilian e-commerce company.
-The user is analysing a dashboard and asking questions.
+You are a conversational BI analyst. Always respond in English.
 
-{schema_context}
-
-Current dashboard:
+Dashboard context:
 {json.dumps(req.dashboard_context, indent=2)}
 
 Conversation so far:
@@ -65,12 +53,10 @@ Conversation so far:
 
 User question: "{req.message}"
 
-If the user asks for filtered or new data, generate a SQL query to answer it.
-
 Return only valid JSON, no markdown backticks:
 {{
-  "answer": "Conversational answer to the user's question",
-  "sql_query": "SELECT ... (or null if no query needed)",
+  "answer": "Your conversational answer in English",
+  "sql_query": "SELECT ... or null if no query needed",
   "insight_scores": {{
     "accuracy": 4,
     "relevance": 5,
@@ -78,11 +64,6 @@ Return only valid JSON, no markdown backticks:
   }},
   "follow_up_suggestions": ["Question 1?", "Question 2?"]
 }}
-
-insight_scores 1-5:
-- accuracy: is this grounded in the actual data shown?
-- relevance: does it directly answer what was asked?
-- novelty: does it reveal something non-obvious?
 """
 
     response = ask_ai(prompt)
@@ -97,7 +78,6 @@ insight_scores 1-5:
     except Exception:
         raise HTTPException(500, f"Could not parse chat response: {response}")
 
-    # if Gemini generated a SQL query, run it and attach results
     sql = parsed.get("sql_query")
     query_results = None
     if sql and sql.lower() != "null" and sql.strip():

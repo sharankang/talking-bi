@@ -1,59 +1,92 @@
 import { useState, useEffect } from 'react'
-import InputScreen from './components/InputScreen'
-import ConfirmScreen from './components/ConfirmScreen'
-import PreviewScreen from './components/PreviewScreen'
-import DashboardScreen from './components/DashboardScreen'
-import { exploreData } from './api'
+import Sidebar from './components/Sidebar'
+import InputPanel from './components/InputPanel'
+import DashboardView from './components/DashboardView'
+import { getSessions, saveSession } from './api'
 
 export default function App() {
-  const [screen, setScreen] = useState('input')
-  const [exploration, setExploration] = useState(null)
-  const [intent, setIntent] = useState(null)
-  const [dashboards, setDashboards] = useState([])
-  const [selectedDashboard, setSelectedDashboard] = useState(null)
+  const [sessions, setSessions] = useState([])
+  const [activeSession, setActiveSession] = useState(null)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
-    exploreData()
-      .then(res => setExploration(res.data.exploration))
-      .catch(err => console.error('Explore failed:', err))
+    fetchSessions()
   }, [])
 
+  const fetchSessions = async () => {
+    try {
+      const res = await getSessions()
+      setSessions(res.data.sessions || [])
+    } catch (e) {
+      console.error('Could not load sessions', e)
+    }
+  }
+
+  const handleAnalysis = async (result, query) => {
+    try {
+      const saved = await saveSession({
+        query,
+        summary: result.summary,
+        kpi_cards: result.kpi_cards,
+        dashboard_tabs: result.tabs,
+        sql_used: result.sql_used,
+      })
+      const newSession = {
+        ...saved.data.session,
+        kpi_cards: result.kpi_cards,
+        dashboard_tabs: result.tabs,
+        sql_used: result.sql_used,
+      }
+      setActiveSession(newSession)
+      fetchSessions()
+    } catch (e) {
+      setActiveSession({
+        query,
+        summary: result.summary,
+        kpi_cards: result.kpi_cards,
+        dashboard_tabs: result.tabs,
+        sql_used: result.sql_used,
+      })
+    }
+  }
+
+  const handleSelectSession = async (session) => {
+    try {
+      const { getSession } = await import('./api')
+      const res = await getSession(session.id)
+      setActiveSession(res.data.session)
+    } catch (e) {
+      console.error(e)
+    }
+  }
+
+  const handleNewAnalysis = () => {
+    setActiveSession(null)
+  }
+
   return (
-    <div className="min-h-screen bg-[#0f0f1a] text-white">
-      {screen === 'input' && (
-        <InputScreen
-          exploration={exploration}
-          onIntent={(parsedIntent) => {
-            setIntent(parsedIntent)
-            setScreen('confirm')
-          }}
-        />
-      )}
-      {screen === 'confirm' && (
-        <ConfirmScreen
-          intent={intent}
-          onConfirm={(dashboardList) => {
-            setDashboards(dashboardList)
-            setScreen('preview')
-          }}
-          onEdit={() => setScreen('input')}
-        />
-      )}
-      {screen === 'preview' && (
-        <PreviewScreen
-          dashboards={dashboards}
-          onSelect={(dashboard) => {
-            setSelectedDashboard(dashboard)
-            setScreen('dashboard')
-          }}
-        />
-      )}
-      {screen === 'dashboard' && (
-        <DashboardScreen
-          dashboard={selectedDashboard}
-          onBack={() => setScreen('preview')}
-        />
-      )}
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#070b14' }}>
+      <Sidebar
+        sessions={sessions}
+        activeSession={activeSession}
+        onSelect={handleSelectSession}
+        onNew={handleNewAnalysis}
+        onRefresh={fetchSessions}
+      />
+      <main style={{ flex: 1, overflowY: 'auto' }}>
+        {!activeSession ? (
+          <InputPanel
+            onResult={handleAnalysis}
+            loading={loading}
+            setLoading={setLoading}
+          />
+        ) : (
+          <DashboardView
+            session={activeSession}
+            onNew={handleNewAnalysis}
+          />
+        )}
+      </main>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import explore, intent, dashboards, chat
+from routes import explore, analyse, chat, sessions
 
 app = FastAPI(title="Talking BI API")
 
@@ -11,10 +11,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(explore.router,    tags=["Explore"])
-app.include_router(intent.router,     tags=["Intent"])
-app.include_router(dashboards.router, tags=["Dashboards"])
-app.include_router(chat.router,       tags=["Chat"])
+app.include_router(explore.router,   tags=["Explore"])
+app.include_router(analyse.router,   tags=["Analyse"])
+app.include_router(chat.router,      tags=["Chat"])
+app.include_router(sessions.router,  tags=["Sessions"])
 
 @app.get("/")
 def root():

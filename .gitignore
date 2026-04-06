@@ -18,3 +18,6 @@ Thumbs.db
 
 # seed script 
 backend/seed.py
+
+node_modules/
+project-docs/

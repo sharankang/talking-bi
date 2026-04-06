@@ -139,7 +139,8 @@ def generate_dashboards(req: DashboardRequest):
         })
 
     prompt = f"""
-You are a BI dashboard designer for a Brazilian e-commerce company.
+You are a BI dashboard designer for a Brazilian e-commerce company. 
+Always respond in English regardless of the data's origin language.
 Based on the following KPIs and their real data, design 3 different dashboard layouts.
 
 KPI data:

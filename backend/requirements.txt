@@ -1,5 +1,12 @@
 fastapi
-psycopg2
+uvicorn
+supabase
+psycopg2-binary
 pandas
-numpy
-google-generative-ai
+openpyxl
+python-dotenv
+google-generativeai
+google-genai
+python-multipart
+httpx
+pydantic
