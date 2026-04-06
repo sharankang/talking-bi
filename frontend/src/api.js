@@ -1,6 +1,9 @@
 import axios from 'axios'
 
-const BASE = 'http://13.201.7.113:8000'
+const BASE =
+  window.location.hostname === "localhost"
+    ? "http://localhost:8000"
+    : "http://13.201.7.113:8000"
 
 export const exploreData = () =>
   axios.get(`${BASE}/explore`)
