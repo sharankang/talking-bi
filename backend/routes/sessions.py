@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional
 from services.supabase_client import supabase
 
 router = APIRouter()
@@ -15,13 +15,15 @@ class SessionCreate(BaseModel):
     dataset_preview: Optional[list] = None
     db_source: Optional[str] = None
     schema_summary: Optional[str] = None
+    database_label: Optional[str] = None
+    table_overview: Optional[dict] = None
 
 
 @router.get("/sessions")
 def get_sessions():
     try:
         result = supabase.table("sessions") \
-            .select("id, query, summary, created_at, dataset_preview, db_source, schema_summary") \
+            .select("id, query, summary, created_at, db_source, schema_summary, database_label, dataset_preview") \
             .order("created_at", desc=True) \
             .limit(20) \
             .execute()
@@ -55,6 +57,8 @@ def create_session(req: SessionCreate):
             "dataset_preview": req.dataset_preview,
             "db_source": req.db_source,
             "schema_summary": req.schema_summary,
+            "database_label": req.database_label,
+            "table_overview": req.table_overview,
         }).execute()
         return {"status": "success", "session": result.data[0]}
     except Exception as e:

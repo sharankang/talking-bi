@@ -11,35 +11,33 @@ load_dotenv()
 router = APIRouter()
 
 
-def get_schema_context(db_url: str) -> str:
-    """Read schema from any PostgreSQL database and format for Gemini."""
+def get_schema_context(db_url: str) -> tuple:
+    """Returns (schema_context_string, primary_table_name)"""
     try:
         conn = psycopg2.connect(db_url)
         cur = conn.cursor()
 
         cur.execute("""
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-            AND table_type = 'BASE TABLE'
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
             ORDER BY table_name;
         """)
         tables = [r[0] for r in cur.fetchall()]
 
         context = "Available tables:\n"
+        primary_table = tables[0] if tables else None
+
         for table in tables:
             cur.execute("""
                 SELECT column_name, data_type
                 FROM information_schema.columns
-                WHERE table_schema = 'public'
-                AND table_name = %s
+                WHERE table_schema = 'public' AND table_name = %s
                 ORDER BY ordinal_position;
             """, (table,))
             cols = cur.fetchall()
             col_str = ", ".join([f"{c[0]} ({c[1]})" for c in cols])
             context += f"- {table}({col_str})\n"
 
-            # sample 2 rows to show data shape
             try:
                 cur.execute(f'SELECT * FROM "{table}" LIMIT 2')
                 col_names = [d[0] for d in cur.description]
@@ -51,10 +49,32 @@ def get_schema_context(db_url: str) -> str:
 
         cur.close()
         conn.close()
-        return context
+        return context, primary_table
 
     except Exception as e:
         raise HTTPException(500, f"Could not read schema: {str(e)}")
+
+
+def get_table_overview(db_url: str, table_name: str, limit: int = 10) -> dict:
+    """Fetch column names and first N rows from a table."""
+    try:
+        conn = psycopg2.connect(db_url)
+        cur = conn.cursor()
+        cur.execute(f'SELECT * FROM "{table_name}" LIMIT {limit}')
+        cols = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+        data = []
+        for row in rows:
+            record = {}
+            for i, col in enumerate(cols):
+                val = row[i]
+                record[col] = str(val) if val is not None else None
+            data.append(record)
+        return {"table": table_name, "columns": cols, "rows": data}
+    except Exception as e:
+        return {"table": table_name, "columns": [], "rows": [], "error": str(e)}
 
 
 def run_sql(db_url: str, sql: str) -> list:
@@ -89,7 +109,7 @@ class AnalyseRequest(BaseModel):
 
 @router.post("/analyse")
 def analyse(req: AnalyseRequest):
-    schema_context = get_schema_context(req.db_url)
+    schema_context, primary_table = get_schema_context(req.db_url)
 
     plan_prompt = f"""
 You are a BI analyst. A user asked: "{req.query}"
@@ -97,11 +117,12 @@ You are a BI analyst. A user asked: "{req.query}"
 Database schema:
 {schema_context}
 
-Generate a comprehensive analysis plan grounded in the actual tables and columns above.
+Generate a comprehensive analysis plan grounded in actual tables and columns above.
 Always respond in English.
 Return only valid JSON, no markdown backticks:
 {{
   "summary": "One sentence describing the analysis",
+  "primary_table": "most relevant table name for overview",
   "kpi_cards": [
     {{
       "label": "Metric name",
@@ -117,7 +138,6 @@ Return only valid JSON, no markdown backticks:
           "title": "Chart title",
           "chart_type": "bar | line | pie",
           "sql": "SELECT col as label, agg as value FROM ... GROUP BY col ORDER BY value DESC LIMIT 15",
-          "color": "#6366f1",
           "insight": "One sentence insight"
         }}
       ]
@@ -126,13 +146,12 @@ Return only valid JSON, no markdown backticks:
 }}
 
 Rules:
-- Only use tables and columns that actually exist in the schema above
+- Only use tables and columns that actually exist
 - Generate 4 KPI cards most relevant to the query
 - Generate 3-4 tabs with 2-3 charts each
-- Every chart SQL must return exactly two columns named 'label' and 'value'
-- Every KPI SQL must return exactly one row with a column named 'value'
-- For time trends, use TO_CHAR(date_column::timestamp, 'YYYY-MM') as label
-- Always order time series by label ASC
+- Chart SQL must return exactly two columns named 'label' and 'value'
+- KPI SQL must return one row with a column named 'value'
+- For time trends use TO_CHAR(date_col::timestamp, 'YYYY-MM') as label ordered ASC
 """
 
     plan_response = ask_ai(plan_prompt)
@@ -149,7 +168,6 @@ Rules:
 
     sql_log = []
 
-    # execute KPI cards
     kpi_cards = []
     for card in plan.get("kpi_cards", []):
         sql = card.get("sql", "")
@@ -162,7 +180,6 @@ Rules:
             "format": card.get("format", "number")
         })
 
-    # execute chart SQLs
     tabs = []
     for tab in plan.get("tabs", []):
         charts = []
@@ -174,17 +191,23 @@ Rules:
                 charts.append({
                     "title": chart["title"],
                     "chart_type": chart.get("chart_type", "bar"),
-                    "color": chart.get("color", "#6366f1"),
                     "insight": chart.get("insight", ""),
                     "data": data
                 })
         if charts:
             tabs.append({"name": tab["name"], "charts": charts})
 
+    # table overview — fetch from primary table
+    overview_table = plan.get("primary_table") or primary_table
+    table_overview = None
+    if overview_table:
+        table_overview = get_table_overview(req.db_url, overview_table, limit=10)
+
     return {
         "status": "success",
         "summary": plan.get("summary", ""),
         "kpi_cards": kpi_cards,
         "tabs": tabs,
-        "sql_used": sql_log
+        "sql_used": sql_log,
+        "table_overview": table_overview,
     }

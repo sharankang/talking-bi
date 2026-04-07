@@ -13,17 +13,13 @@ class ExploreRequest(BaseModel):
 
 
 def get_schema_from_db(db_url: str) -> dict:
-    """Read all tables and columns from any PostgreSQL database."""
     try:
         conn = psycopg2.connect(db_url)
         cur = conn.cursor()
 
-        # get all user tables
         cur.execute("""
-            SELECT table_name
-            FROM information_schema.tables
-            WHERE table_schema = 'public'
-            AND table_type = 'BASE TABLE'
+            SELECT table_name FROM information_schema.tables
+            WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
             ORDER BY table_name;
         """)
         tables = [r[0] for r in cur.fetchall()]
@@ -32,18 +28,15 @@ def get_schema_from_db(db_url: str) -> dict:
         samples = {}
 
         for table in tables:
-            # get columns
             cur.execute("""
                 SELECT column_name, data_type
                 FROM information_schema.columns
-                WHERE table_schema = 'public'
-                AND table_name = %s
+                WHERE table_schema = 'public' AND table_name = %s
                 ORDER BY ordinal_position;
             """, (table,))
             cols = cur.fetchall()
             schema[table] = [{"column": c[0], "type": c[1]} for c in cols]
 
-            # get sample rows
             try:
                 cur.execute(f'SELECT * FROM "{table}" LIMIT 3')
                 col_names = [d[0] for d in cur.description]
@@ -64,22 +57,22 @@ def get_schema_from_db(db_url: str) -> dict:
 def explore_data(req: ExploreRequest):
     db_info = get_schema_from_db(req.db_url)
 
-    # build schema string for Gemini
     schema_str = ""
     for table, cols in db_info["schema"].items():
-        col_list = ", ".join([f"{c['column']} ({c['type']})" for c in cols])
-        schema_str += f"\nTable: {table}\nColumns: {col_list}\n"
+        col_list = ", ".join([c['column'] for c in cols])
+        schema_str += f"\nTable: {table} — Columns: {col_list}\n"
 
     prompt = f"""
-You are a senior data analyst. A user has connected a database with the following schema:
+You are a senior data analyst. A user connected a database with these tables and columns:
 
 {schema_str}
 
 Sample data:
-{json.dumps({k: v for k, v in db_info['samples'].items()}, indent=2, default=str)}
+{json.dumps({k: v[:2] for k, v in db_info['samples'].items()}, indent=2, default=str)}
 
-Analyse this database and return only valid JSON, no markdown backticks:
+Return only valid JSON, no markdown backticks:
 {{
+  "database_label": "Short 2-4 word name describing what this database is about e.g. 'E-commerce Sales', 'HR Management', 'Inventory Tracker', 'Financial Records'",
   "business_description": "2-3 sentence description of what this data is about",
   "tables": {{
     "table_name": {{
@@ -89,21 +82,18 @@ Analyse this database and return only valid JSON, no markdown backticks:
       "time_columns": ["date or timestamp columns if any"]
     }}
   }},
-  "relationships": [
-    "table1.col links to table2.col"
-  ],
+  "relationships": ["table1.col links to table2.col"],
   "suggested_kpis": [
     {{
       "name": "KPI name",
-      "description": "what it measures and why it matters",
+      "description": "what it measures",
       "tables_needed": ["table1"],
-      "sql_hint": "SELECT ... FROM ... GROUP BY ..."
+      "sql_hint": "SELECT ... FROM ..."
     }}
   ]
 }}
 
-Only suggest KPIs based on columns that actually exist.
-Always respond in English.
+Always respond in English. Only suggest KPIs based on columns that actually exist.
 """
 
     response = ask_ai(prompt)
@@ -121,6 +111,7 @@ Always respond in English.
     return {
         "status": "success",
         "exploration": parsed,
+        "database_label": parsed.get("database_label", "Database"),
         "tables": db_info["tables"],
         "schema": db_info["schema"],
         "samples": db_info["samples"],
