@@ -3,6 +3,7 @@ import numpy as np
 import re
 import io
 import os
+import json
 import psycopg2
 from psycopg2.extras import execute_values
 from fastapi import APIRouter, UploadFile, File, HTTPException
@@ -80,34 +81,26 @@ async def upload_file(file: UploadFile = File(...)):
 
     database_url = os.getenv("DATABASE_URL")
     if not database_url:
-        raise HTTPException(500, "DATABASE_URL not set in .env")
+        raise HTTPException(500, "DATABASE_URL not set — needed as scratch space for CSV uploads")
 
     try:
         conn = psycopg2.connect(database_url)
         conn.autocommit = False
         cur = conn.cursor()
-
         cur.execute(f"DROP TABLE IF EXISTS {table_name};")
         col_defs_sql = ", ".join(col_defs)
         cur.execute(f"CREATE TABLE {table_name} (id bigserial primary key, {col_defs_sql});")
-
         col_names = ", ".join([f'"{c}"' for c in columns])
-        execute_values(
-            cur,
-            f"INSERT INTO {table_name} ({col_names}) VALUES %s",
-            records,
-            page_size=1000
-        )
-
+        execute_values(cur, f"INSERT INTO {table_name} ({col_names}) VALUES %s", records, page_size=1000)
         conn.commit()
         cur.close()
         conn.close()
-
     except Exception as e:
         raise HTTPException(500, f"Database error: {str(e)}")
 
+    # return preview rows
     preview = []
-    for r in df.head(5).to_dict(orient='records'):
+    for r in df.head(6).to_dict(orient='records'):
         preview.append({k: str(v) if v is not None else None for k, v in r.items()})
 
     return {
@@ -115,5 +108,6 @@ async def upload_file(file: UploadFile = File(...)):
         "rows_loaded": len(records),
         "columns": schema,
         "table_name": table_name,
-        "preview": preview
+        "preview": preview,
+        "db_url": database_url,
     }

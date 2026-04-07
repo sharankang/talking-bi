@@ -6,7 +6,7 @@ import DashboardTabs from './DashboardTabs'
 import SqlPanel from './SqlPanel'
 import ChatPanel from './ChatPanel'
 
-export default function DashboardView({ session, onNew }) {
+export default function DashboardView({ session, onNew, dbUrl }) {
   const [chatOpen, setChatOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const exportRef = useRef()
@@ -138,6 +138,7 @@ export default function DashboardView({ session, onNew }) {
           <ChatPanel
             dashboardContext={{ query: session.query, kpi_cards: kpiCards, tabs }}
             inline
+            dbUrl={dbUrl}
           />
         </div>
       )}

@@ -5,18 +5,26 @@ const BASE =
     ? "http://localhost:8000"
     : "http://13.201.7.113:8000"
 
-export const exploreData = () =>
-  axios.get(`${BASE}/explore`)
 
-export const analyseQuery = (query) =>
-  axios.post(`${BASE}/analyse`, { query })
+export const exploreData = (dbUrl) =>
+  axios.post(`${BASE}/explore`, { db_url: dbUrl })
 
-export const sendChat = (message, dashboardContext, history) =>
+export const analyseQuery = (query, dbUrl) =>
+  axios.post(`${BASE}/analyse`, { query, db_url: dbUrl })
+
+export const sendChat = (message, dashboardContext, history, dbUrl) =>
   axios.post(`${BASE}/chat`, {
     message,
     dashboard_context: dashboardContext,
-    history
+    history,
+    db_url: dbUrl,
   })
+
+export const uploadFile = (file) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return axios.post(`${BASE}/upload`, formData)
+}
 
 export const getSessions = () =>
   axios.get(`${BASE}/sessions`)

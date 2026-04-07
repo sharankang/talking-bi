@@ -20,11 +20,12 @@ class ChatRequest(BaseModel):
     message: str
     dashboard_context: dict
     history: Optional[List[Message]] = []
+    db_url: str
 
 
-def run_query(sql: str) -> list:
+def run_query(db_url: str, sql: str) -> list:
     try:
-        conn = psycopg2.connect(os.getenv("DATABASE_URL"))
+        conn = psycopg2.connect(db_url)
         cur = conn.cursor()
         cur.execute(sql)
         cols = [d[0] for d in cur.description]
@@ -45,7 +46,7 @@ def chat(req: ChatRequest):
     prompt = f"""
 You are a conversational BI analyst. Always respond in English.
 
-Dashboard context:
+Dashboard context (KPI cards and charts already shown to user):
 {json.dumps(req.dashboard_context, indent=2)}
 
 Conversation so far:
@@ -53,10 +54,18 @@ Conversation so far:
 
 User question: "{req.message}"
 
+Your job:
+1. Answer the question conversationally
+2. Generate a SQL query that fetches data to visualize the answer
+3. Recommend the best chart type for that data
+4. Score your own insight
+
 Return only valid JSON, no markdown backticks:
 {{
-  "answer": "Your conversational answer in English",
-  "sql_query": "SELECT ... or null if no query needed",
+  "answer": "Conversational answer in English",
+  "sql_query": "SELECT col as label, agg as value FROM table GROUP BY col ORDER BY value DESC LIMIT 15",
+  "chart_type": "bar | line | pie",
+  "chart_title": "Descriptive chart title",
   "insight_scores": {{
     "accuracy": 4,
     "relevance": 5,
@@ -64,6 +73,12 @@ Return only valid JSON, no markdown backticks:
   }},
   "follow_up_suggestions": ["Question 1?", "Question 2?"]
 }}
+
+Rules:
+- sql_query must return columns named exactly 'label' and 'value'
+- Only use tables that exist in the dashboard context
+- If the question doesn't need a chart, set sql_query to null
+- insight scores are 1-5: accuracy=factually grounded, relevance=answers the question, novelty=non-obvious finding
 """
 
     response = ask_ai(prompt)
@@ -78,13 +93,17 @@ Return only valid JSON, no markdown backticks:
     except Exception:
         raise HTTPException(500, f"Could not parse chat response: {response}")
 
+    # execute the chart SQL
+    chart_data = None
     sql = parsed.get("sql_query")
-    query_results = None
     if sql and sql.lower() != "null" and sql.strip():
-        query_results = run_query(sql)
+        chart_data = run_query(req.db_url, sql)
+        # filter out error rows
+        if chart_data and "error" in chart_data[0]:
+            chart_data = None
 
     return {
         "status": "success",
         "response": parsed,
-        "query_results": query_results
+        "chart_data": chart_data,
     }

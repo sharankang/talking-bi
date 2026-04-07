@@ -1,7 +1,6 @@
-import json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from services.supabase_client import supabase
 
 router = APIRouter()
@@ -13,13 +12,16 @@ class SessionCreate(BaseModel):
     kpi_cards: Optional[list] = None
     dashboard_tabs: Optional[list] = None
     sql_used: Optional[list] = None
+    dataset_preview: Optional[list] = None
+    db_source: Optional[str] = None
+    schema_summary: Optional[str] = None
 
 
 @router.get("/sessions")
 def get_sessions():
     try:
         result = supabase.table("sessions") \
-            .select("id, query, summary, created_at") \
+            .select("id, query, summary, created_at, dataset_preview, db_source, schema_summary") \
             .order("created_at", desc=True) \
             .limit(20) \
             .execute()
@@ -50,6 +52,9 @@ def create_session(req: SessionCreate):
             "kpi_cards": req.kpi_cards,
             "dashboard_tabs": req.dashboard_tabs,
             "sql_used": req.sql_used,
+            "dataset_preview": req.dataset_preview,
+            "db_source": req.db_source,
+            "schema_summary": req.schema_summary,
         }).execute()
         return {"status": "success", "session": result.data[0]}
     except Exception as e:
