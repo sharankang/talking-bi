@@ -1,54 +1,49 @@
 import { useState } from 'react'
 import { sendChat } from '../api'
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
-const COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
+const RAINBOW = ['#00d2ff','#3fb950','#ffa600','#f85149','#7b2ff7','#ff6b9d','#00e5a0','#ffcc00']
 
-function MiniChart({ data, chartType, color }) {
+function MultiColorBar(props) {
+  const { x, y, width, height, index } = props
+  return <rect x={x} y={y} width={width} height={height} fill={RAINBOW[index % RAINBOW.length]} rx={2}/>
+}
+
+function MiniChart({ data, chartType }) {
   if (!data || data.length === 0) return null
+  const tip = { contentStyle: { background: '#0d1117', border: '1px solid #30363d', borderRadius: '8px', fontFamily: 'Space Grotesk', fontSize: '11px' }, labelStyle: { color: '#e6edf3' }, itemStyle: { color: '#8b949e' } }
 
-  const tooltipStyle = {
-    contentStyle: { background: '#0a0f1e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', fontFamily: 'DM Sans', fontSize: '11px' },
-    labelStyle: { color: 'white' },
-    itemStyle: { color: 'rgba(255,255,255,0.7)' }
-  }
+  if (chartType === 'line') return (
+    <ResponsiveContainer width="100%" height={150}>
+      <LineChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+        <XAxis dataKey="label" tick={{ fill: '#6e7681', fontSize: 9, fontFamily: 'Space Mono' }} />
+        <YAxis tick={{ fill: '#6e7681', fontSize: 9, fontFamily: 'Space Mono' }} width={35}/>
+        <Tooltip {...tip} />
+        <Line type="monotone" dataKey="value" stroke="#00d2ff" strokeWidth={2} dot={false} />
+      </LineChart>
+    </ResponsiveContainer>
+  )
 
-  if (chartType === 'line') {
-    return (
-      <ResponsiveContainer width="100%" height={160}>
-        <LineChart data={data}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-          <XAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9, fontFamily: 'DM Mono' }} />
-          <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9, fontFamily: 'DM Mono' }} width={40} />
-          <Tooltip {...tooltipStyle} />
-          <Line type="monotone" dataKey="value" stroke={color || '#fbbf24'} strokeWidth={2} dot={false} />
-        </LineChart>
-      </ResponsiveContainer>
-    )
-  }
-
-  if (chartType === 'pie') {
-    return (
-      <ResponsiveContainer width="100%" height={160}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="label" cx="50%" cy="50%" outerRadius={60}>
-            {data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-          </Pie>
-          <Tooltip {...tooltipStyle} />
-          <Legend wrapperStyle={{ fontSize: 10, fontFamily: 'DM Mono', color: 'rgba(255,255,255,0.4)' }} />
-        </PieChart>
-      </ResponsiveContainer>
-    )
-  }
+  if (chartType === 'pie') return (
+    <ResponsiveContainer width="100%" height={150}>
+      <PieChart>
+        <Pie data={data} dataKey="value" nameKey="label" cx="50%" cy="50%" outerRadius={55} paddingAngle={2}>
+          {data.map((_, i) => <Cell key={i} fill={RAINBOW[i % RAINBOW.length]} />)}
+        </Pie>
+        <Tooltip {...tip} />
+      </PieChart>
+    </ResponsiveContainer>
+  )
 
   return (
-    <ResponsiveContainer width="100%" height={160}>
+    <ResponsiveContainer width="100%" height={150}>
       <BarChart data={data}>
-        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-        <XAxis dataKey="label" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9, fontFamily: 'DM Mono' }} />
-        <YAxis tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 9, fontFamily: 'DM Mono' }} width={40} />
-        <Tooltip {...tooltipStyle} />
-        <Bar dataKey="value" fill={color || '#fbbf24'} radius={[3, 3, 0, 0]} />
+        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+        <XAxis dataKey="label" tick={{ fill: '#6e7681', fontSize: 9, fontFamily: 'Space Mono' }} />
+        <YAxis tick={{ fill: '#6e7681', fontSize: 9, fontFamily: 'Space Mono' }} width={35}/>
+        <Tooltip {...tip} />
+        <Bar dataKey="value" shape={<MultiColorBar />} radius={[3, 3, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   )
@@ -63,53 +58,50 @@ export default function ChatPanel({ dashboardContext, inline, dbUrl }) {
     if (!input.trim() || loading) return
     const userMsg = { role: 'user', content: input }
     setMessages(prev => [...prev, userMsg])
-    setInput('')
-    setLoading(true)
+    setInput(''); setLoading(true)
     try {
       const res = await sendChat(input, dashboardContext, messages, dbUrl)
       const r = res.data.response
-      const chartData = res.data.chart_data
       setMessages(prev => [...prev, {
         role: 'assistant',
         content: r.answer,
         scores: r.insight_scores,
         suggestions: r.follow_up_suggestions,
-        chartData: chartData,
+        chartData: res.data.chart_data,
         chartType: r.chart_type,
         chartTitle: r.chart_title,
         sqlQuery: r.sql_query,
       }])
     } catch {
       setMessages(prev => [...prev, { role: 'assistant', content: 'Something went wrong. Try again.' }])
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
-  const border = 'rgba(255,255,255,0.07)'
+  const starters = ['What was the peak month?', 'Which category leads in sales?', 'Show me the top 5 by revenue']
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: inline ? '100vh' : 'auto', background: 'transparent', border: inline ? 'none' : `1px solid ${border}`, borderRadius: inline ? 0 : '16px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: 'transparent' }}>
+      <style>{`
+        .chat-input-field { background:rgba(255,255,255,0.04);border:1px solid #30363d;border-radius:8px;padding:8px 12px;font-size:12px;color:#e6edf3;outline:none;font-family:'Space Grotesk',sans-serif;width:100%; }
+        .chat-input-field:focus { border-color:#00d2ff; }
+        .chat-input-field::placeholder { color:#6e7681; }
+      `}</style>
 
-      {/* Header */}
-      <div style={{ padding: '16px 16px 12px', borderBottom: `1px solid ${border}` }}>
-        <p style={{ fontFamily: 'DM Sans', fontSize: '13px', fontWeight: 500, color: 'white', margin: 0 }}>Ask about this data</p>
-        <p style={{ fontFamily: 'DM Mono', fontSize: '10px', color: 'rgba(255,255,255,0.25)', margin: '2px 0 0', letterSpacing: '0.06em' }}>GEMINI · INSIGHT EVAL</p>
+      <div style={{ padding: '14px 16px 12px', borderBottom: '1px solid #21262d' }}>
+        <p style={{ fontFamily: 'Space Grotesk', fontSize: '13px', fontWeight: 600, color: '#e6edf3', margin: 0 }}>Ask about this data</p>
+        <p style={{ fontFamily: 'Space Mono', fontSize: '9px', color: '#6e7681', margin: '3px 0 0', letterSpacing: '0.06em' }}>GEMINI · INSIGHT EVAL · CHARTS</p>
       </div>
 
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '14px' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '12px' }}>
         {messages.length === 0 && (
-          <div style={{ padding: '20px 0', textAlign: 'center' }}>
-            <p style={{ fontSize: '12px', color: 'rgba(255,255,255,0.18)', fontFamily: 'DM Sans', marginBottom: '14px' }}>
-              Ask anything — answers come with charts
+          <div style={{ padding: '16px 0' }}>
+            <p style={{ fontFamily: 'Space Grotesk', fontSize: '12px', color: '#6e7681', textAlign: 'center', marginBottom: '14px' }}>
+              Every answer comes with a chart
             </p>
-            {[
-              'What was the peak revenue month?',
-              'Which category has the highest sales?',
-              'Show me customer distribution by region',
-            ].map((s, i) => (
-              <button key={i} onClick={() => setInput(s)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', marginBottom: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', color: 'rgba(255,255,255,0.4)', fontSize: '11px', cursor: 'pointer', fontFamily: 'DM Sans' }}>
+            {starters.map((s, i) => (
+              <button key={i} onClick={() => setInput(s)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '8px 12px', marginBottom: '6px', background: 'rgba(255,255,255,0.03)', border: '1px solid #21262d', borderRadius: '8px', color: '#8b949e', fontSize: '11px', cursor: 'pointer', fontFamily: 'Space Grotesk', transition: 'all 0.15s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#00d2ff'; e.currentTarget.style.color = '#00d2ff' }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = '#21262d'; e.currentTarget.style.color = '#8b949e' }}>
                 {s}
               </button>
             ))}
@@ -118,96 +110,73 @@ export default function ChatPanel({ dashboardContext, inline, dbUrl }) {
 
         {messages.map((msg, i) => (
           <div key={i} style={{ marginBottom: '14px' }}>
-
-            {/* Message bubble */}
             <div style={{
               padding: '9px 12px', borderRadius: '10px', fontSize: '12px', lineHeight: 1.55,
-              background: msg.role === 'user' ? 'rgba(251,191,36,0.1)' : 'rgba(255,255,255,0.04)',
-              color: msg.role === 'user' ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.75)',
-              marginLeft: msg.role === 'user' ? '24px' : '0',
-              fontFamily: 'DM Sans',
-              border: `1px solid ${msg.role === 'user' ? 'rgba(251,191,36,0.2)' : border}`,
+              background: msg.role === 'user' ? 'rgba(0,210,255,0.1)' : 'rgba(255,255,255,0.04)',
+              color: msg.role === 'user' ? '#e6edf3' : '#c9d1d9',
+              marginLeft: msg.role === 'user' ? '20px' : '0',
+              fontFamily: 'Space Grotesk',
+              border: `1px solid ${msg.role === 'user' ? 'rgba(0,210,255,0.2)' : '#21262d'}`,
             }}>
               {msg.content}
             </div>
 
-            {/* Chart (only for assistant messages with data) */}
             {msg.role === 'assistant' && msg.chartData && msg.chartData.length > 0 && (
-              <div style={{ marginTop: '8px', background: 'rgba(255,255,255,0.02)', border: `1px solid ${border}`, borderRadius: '10px', padding: '12px' }}>
-                {msg.chartTitle && (
-                  <p style={{ fontFamily: 'DM Sans', fontSize: '11px', fontWeight: 500, color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
-                    {msg.chartTitle}
-                  </p>
-                )}
-                <MiniChart
-                  data={msg.chartData}
-                  chartType={msg.chartType || 'bar'}
-                  color="#fbbf24"
-                />
+              <div style={{ marginTop: '8px', background: '#0d1117', border: '1px solid #21262d', borderRadius: '10px', padding: '12px' }}>
+                {msg.chartTitle && <p style={{ fontFamily: 'Space Grotesk', fontSize: '11px', fontWeight: 600, color: '#8b949e', marginBottom: '8px' }}>{msg.chartTitle}</p>}
+                <MiniChart data={msg.chartData} chartType={msg.chartType || 'bar'} />
               </div>
             )}
 
-            {/* SQL used */}
             {msg.role === 'assistant' && msg.sqlQuery && msg.sqlQuery !== 'null' && (
               <details style={{ marginTop: '6px' }}>
-                <summary style={{ fontFamily: 'DM Mono', fontSize: '10px', color: 'rgba(255,255,255,0.2)', cursor: 'pointer', letterSpacing: '0.06em', textTransform: 'uppercase', listStyle: 'none' }}>
+                <summary style={{ fontFamily: 'Space Mono', fontSize: '9px', color: '#6e7681', cursor: 'pointer', letterSpacing: '0.06em', textTransform: 'uppercase', listStyle: 'none' }}>
                   ▸ SQL used
                 </summary>
-                <pre style={{ marginTop: '6px', background: 'rgba(0,0,0,0.3)', border: `1px solid ${border}`, borderRadius: '8px', padding: '8px 10px', fontSize: '10px', fontFamily: 'DM Mono', color: 'rgba(255,255,255,0.45)', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+                <pre style={{ marginTop: '6px', background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '8px 10px', fontSize: '10px', fontFamily: 'Space Mono', color: '#3fb950', overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {msg.sqlQuery}
                 </pre>
               </details>
             )}
 
-            {/* Insight scores */}
             {msg.scores && (
               <div style={{ display: 'flex', gap: '4px', marginTop: '5px', flexWrap: 'wrap' }}>
                 {Object.entries(msg.scores).map(([k, v]) => (
-                  <span key={k} style={{ fontSize: '10px', padding: '2px 7px', borderRadius: '20px', background: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.2)', color: '#34d399', fontFamily: 'DM Mono' }}>
+                  <span key={k} style={{ fontSize: '9px', padding: '2px 7px', borderRadius: '20px', background: 'rgba(63,185,80,0.1)', border: '1px solid rgba(63,185,80,0.2)', color: '#3fb950', fontFamily: 'Space Mono' }}>
                     {k} {v}/5
                   </span>
                 ))}
               </div>
             )}
 
-            {/* Follow-up suggestions */}
-            {msg.suggestions && msg.suggestions.length > 0 && (
+            {msg.suggestions?.length > 0 && (
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '7px' }}>
                 {msg.suggestions.map((s, j) => (
-                  <button key={j} onClick={() => setInput(s)} style={{ fontSize: '10px', padding: '3px 8px', borderRadius: '6px', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.18)', color: '#fbbf24', cursor: 'pointer', fontFamily: 'DM Sans' }}>
+                  <button key={j} onClick={() => setInput(s)} style={{ fontSize: '10px', padding: '3px 8px', borderRadius: '6px', background: 'rgba(0,210,255,0.06)', border: '1px solid rgba(0,210,255,0.15)', color: '#00d2ff', cursor: 'pointer', fontFamily: 'Space Grotesk' }}>
                     {s}
                   </button>
                 ))}
               </div>
             )}
-
           </div>
         ))}
 
         {loading && (
-          <div style={{ padding: '9px 12px', borderRadius: '10px', fontSize: '12px', color: 'rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.03)', fontFamily: 'DM Sans', border: `1px solid ${border}` }}>
+          <div style={{ padding: '9px 12px', borderRadius: '10px', fontSize: '12px', color: '#6e7681', background: 'rgba(255,255,255,0.03)', fontFamily: 'Space Grotesk', border: '1px solid #21262d' }}>
             Thinking...
           </div>
         )}
       </div>
 
-      {/* Input */}
-      <div style={{ padding: '12px', borderTop: `1px solid ${border}`, display: 'flex', gap: '8px' }}>
-        <input
-          type="text"
-          value={input}
+      <div style={{ padding: '12px', borderTop: '1px solid #21262d', display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <input className="chat-input-field" type="text" value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && handleSend()}
-          placeholder="Ask a question..."
-          style={{ flex: 1, background: 'rgba(255,255,255,0.04)', border: `1px solid ${border}`, borderRadius: '8px', padding: '7px 10px', fontSize: '12px', color: 'white', outline: 'none', fontFamily: 'DM Sans' }}
+          placeholder="Ask about your data..."
         />
-        <button
-          onClick={handleSend}
-          disabled={!input.trim() || loading}
-          style={{ width: '32px', height: '32px', borderRadius: '8px', border: 'none', background: '#fbbf24', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (!input.trim() || loading) ? 0.35 : 1 }}
-        >
+        <button onClick={handleSend} disabled={!input.trim() || loading} style={{ width: '34px', height: '34px', borderRadius: '8px', border: 'none', background: 'linear-gradient(135deg,#00d2ff,#7b2ff7)', cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: (!input.trim() || loading) ? 0.35 : 1 }}>
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-            <path d="M1 6h10M6 1l5 5-5 5" stroke="#0a0a0a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M1 6h10M6 1l5 5-5 5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
       </div>

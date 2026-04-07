@@ -2,6 +2,10 @@
 .env
 backend/.env
 
+# connection string samples
+backenc/sample.txt
+sample.txt
+
 # python
 backend/venv/
 venv/
